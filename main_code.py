@@ -10,7 +10,6 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 import os
 
-# genai.configure(api_key="AIzaSyBng-yI_H1tNNNU9B3crrZyfQLOVc6b-4w")
 
 load_dotenv()
 
