@@ -5,6 +5,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import PromptTemplate
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 import google.generativeai as genai
 from dotenv import load_dotenv
 import os
@@ -25,10 +26,8 @@ def get_video_id(url):
   return video_id
 
 video_url = st.text_input("Enter the video's YouTube URL: ")
-# video_url = input("Enter the YouTube video URL: ")
 
 if video_url:
-
 
   video_id = get_video_id(video_url)
 
@@ -63,11 +62,26 @@ if video_url:
         """,
         input_variables = ['context', 'question']
     )
-
-  # question = input("Enter your question: ")
-  question = st.text_input("Enter your question: ")
+  
+  if 'messages' not in st.session_state:
+     st.session_state.messages=[]
+     st.session_state.messages.append(SystemMessage("You are an assistant for question-answering tasks"))
+    
+  for message in st.session_state.messages:
+     if isinstance(message, HumanMessage):
+        with st.chat_message('user'):
+           st.markdown(message.content)
+     elif isinstance(message, AIMessage):
+        with st.chat_message('assistant'):
+           st.markdown(message.content)
+        
+  question = st.chat_input("Enter your question: ")
   
   if question:
+    with st.chat_message('user'):
+       st.markdown(question)
+       st.session_state.messages.append(HumanMessage(question))
+
     retrieved_chunk = retriever.invoke(question)
 
     context = ""
@@ -76,8 +90,10 @@ if video_url:
 
     final_prompt = prompt.invoke({'context': context, 'question': question})
 
-    answer = llm.invoke(final_prompt)   #The LLM doesn't remember context from previous questions
-    # answer = llm.invoke(st.session_state.messages)   ##The LLM does remember context from previous questions
+    st.session_state.messages.append(SystemMessage(final_prompt.text))
+    # answer = llm.invoke(final_prompt)   #The LLM doesn't remember context from previous questions
+    answer = llm.invoke(st.session_state.messages)   ##The LLM does remember context from previous questions
 
-    # print("Answer: " + answer.content)
-    st.write("Answer: " + answer.content)
+    with st.chat_message('assistant'):
+       st.markdown(answer.content)
+       st.session_state.messages.append(AIMessage(answer.content))
