@@ -1,3 +1,4 @@
+import streamlit as st
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -15,8 +16,6 @@ load_dotenv()
 google_api_key = os.getenv('GOOGLE_API_KEY')
 hf_token = os.getenv('HF_TOKEN')
 
-video_url = input("Enter the YouTube video URL: ")
-
 def get_video_id(url):
   index = video_url.find("?v=") + 3
   video_id = ""
@@ -25,51 +24,60 @@ def get_video_id(url):
     index = index + 1
   return video_id
 
-video_id = get_video_id(video_url)
+video_url = st.text_input("Enter the video's YouTube URL: ")
+# video_url = input("Enter the YouTube video URL: ")
 
-try:
-    video_id = get_video_id(video_url)
-    transcript_list = YouTubeTranscriptApi().fetch(video_id, languages=['en'])
-    transcript = " ".join([item.text for item in transcript_list.snippets])
-except TranscriptsDisabled:
-    print("No Captions Available For This Video")
+if video_url:
 
-  # st.write("Transcript of the video: " + transcript)
 
-splitter = RecursiveCharacterTextSplitter(chunk_size = 1000, chunk_overlap = 200)
-chunks = splitter.create_documents([transcript])
+  video_id = get_video_id(video_url)
 
-embeddings = HuggingFaceEmbeddings()
+  try:
+      video_id = get_video_id(video_url)
+      transcript_list = YouTubeTranscriptApi().fetch(video_id, languages=['en'])
+      transcript = " ".join([item.text for item in transcript_list.snippets])
+  except TranscriptsDisabled:
+      print("No Captions Are Available For This Video")
 
-vector_store = FAISS.from_documents(chunks, embeddings)
+    # st.write("Transcript of the video: " + transcript)
 
-retriever = vector_store.as_retriever(search_type='similarity', search_kwargs={'k': 4})
+  splitter = RecursiveCharacterTextSplitter(chunk_size = 1000, chunk_overlap = 200)
+  chunks = splitter.create_documents([transcript])
 
-llm = ChatGoogleGenerativeAI(model='gemini-2.5-pro')
+  embeddings = HuggingFaceEmbeddings()
 
-prompt = PromptTemplate(
-      template="""
-        You are a helpful assistant
-        Answer ONLY from the provided transcript context.
-        If the context if insufficient, just say you don't know
+  vector_store = FAISS.from_documents(chunks, embeddings)
 
-        {context}
-        Question: {question}
-      """,
-      input_variables = ['context', 'question']
-  )
+  retriever = vector_store.as_retriever(search_type='similarity', search_kwargs={'k': 4})
 
-question = input("Enter your question: ")
+  llm = ChatGoogleGenerativeAI(model='gemini-2.5-pro')
 
-retrieved_chunk = retriever.invoke(question)
+  prompt = PromptTemplate(
+        template="""
+          You are a helpful assistant
+          Answer ONLY from the provided transcript context.
+          If the context if insufficient, just say you don't know
 
-context = ""
-for chunk in retrieved_chunk:
-  context = context + " " + chunk.page_content
+          {context}
+          Question: {question}
+        """,
+        input_variables = ['context', 'question']
+    )
 
-final_prompt = prompt.invoke({'context': context, 'question': question})
+  # question = input("Enter your question: ")
+  question = st.text_input("Enter your question: ")
+  
+  if question:
+    retrieved_chunk = retriever.invoke(question)
 
-answer = llm.invoke(final_prompt)   #The LLM doesn't remember context from previous questions
-# answer = llm.invoke(st.session_state.messages)   ##The LLM does remember context from previous questions
+    context = ""
+    for chunk in retrieved_chunk:
+      context = context + " " + chunk.page_content
 
-print("Answer: " + answer.content)
+    final_prompt = prompt.invoke({'context': context, 'question': question})
+
+    answer = llm.invoke(final_prompt)   #The LLM doesn't remember context from previous questions
+    # answer = llm.invoke(st.session_state.messages)   ##The LLM does remember context from previous questions
+
+    # print("Answer: " + answer.content)
+    st.write("Answer: " + answer.content)
